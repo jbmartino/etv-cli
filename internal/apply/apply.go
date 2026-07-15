@@ -114,12 +114,18 @@ func reconcileChannels(
 		byNumber[ch.Number] = ch
 	}
 
-	// Only fetch profiles if the manifest actually names one.
+	// Reference lists (ffmpeg profiles, watermarks, fillers) are named by the manifest and resolved
+	// to ids per channel. Each list is fetched only if some channel actually names one of its kind.
 	profileID := map[string]int{}
+	watermarkID := map[string]int{}
+	fillerID := map[string]int{}
+	var needProfile, needWatermark, needFiller bool
 	for _, want := range m.Channels {
-		if want.FFmpegProfile == nil {
-			continue
-		}
+		needProfile = needProfile || want.FFmpegProfile != nil
+		needWatermark = needWatermark || want.Watermark != nil
+		needFiller = needFiller || want.Filler != nil
+	}
+	if needProfile {
 		profiles, err := c.FFmpegProfiles()
 		if err != nil {
 			return nil, err
@@ -127,19 +133,31 @@ func reconcileChannels(
 		for _, p := range profiles {
 			profileID[p.Name] = p.ID
 		}
-		break
+	}
+	if needWatermark {
+		watermarks, err := c.Watermarks()
+		if err != nil {
+			return nil, err
+		}
+		for _, w := range watermarks {
+			watermarkID[w.Name] = w.ID
+		}
+	}
+	if needFiller {
+		fillers, err := c.Fillers()
+		if err != nil {
+			return nil, err
+		}
+		for _, fp := range fillers {
+			fillerID[fp.Name] = fp.ID
+		}
 	}
 
 	ids := map[string]int{}
 	for _, want := range m.Channels {
-		wantProfile := 0
-		if want.FFmpegProfile != nil {
-			id, ok := profileID[*want.FFmpegProfile]
-			if !ok {
-				return nil, fmt.Errorf("channel %q wants ffmpeg profile %q, which does not exist on the server (have: %s)",
-					want.Name, *want.FFmpegProfile, strings.Join(sortedKeys(profileID), ", "))
-			}
-			wantProfile = id
+		refs, err := resolveRefs(want, profileID, watermarkID, fillerID, existing, byNumber)
+		if err != nil {
+			return nil, err
 		}
 
 		// A channel is matched by name, or by its number when the manifest gives one. Without the
@@ -161,7 +179,7 @@ func reconcileChannels(
 				// reported by the steps below as if it were new, which it is.
 				continue
 			}
-			id, err := c.CreateChannel(createChannelFields(want, wantProfile))
+			id, err := c.CreateChannel(createChannelFields(want, refs))
 			if err != nil {
 				return nil, err
 			}
@@ -178,7 +196,7 @@ func reconcileChannels(
 		if err != nil {
 			return nil, err
 		}
-		if changes := channelChanges(want, detail, wantProfile); len(changes) > 0 {
+		if changes := channelChanges(want, detail, refs); len(changes) > 0 {
 			say("%supdate channel %q (%s)", prefix, want.Name, strings.Join(sortedKeys(changes), ", "))
 			res.Changed++
 			if !opts.DryRun {
@@ -253,30 +271,103 @@ func setLogo(
 	return c.SetChannelLogo(channelID, contentType, image)
 }
 
+// channelRefs holds the resolved ids for a channel's named references. A zero profileID means the
+// manifest does not manage the ffmpeg profile; a nil pointer means the manifest does not manage that
+// reference at all, so apply leaves whatever the server has.
+type channelRefs struct {
+	profileID   int
+	watermarkID *int
+	fillerID    *int
+	mirrorID    *int
+}
+
+// resolveRefs turns a channel's named references into ids. A name that does not exist on the server
+// is an error, not a silent skip, so a typo cannot quietly leave a reference unmanaged.
+func resolveRefs(
+	want manifest.Channel,
+	profileID, watermarkID, fillerID map[string]int,
+	existing, byNumber map[string]etv.Channel,
+) (channelRefs, error) {
+	var refs channelRefs
+
+	if want.FFmpegProfile != nil {
+		id, ok := profileID[*want.FFmpegProfile]
+		if !ok {
+			return refs, fmt.Errorf("channel %q wants ffmpeg profile %q, which does not exist on the server (have: %s)",
+				want.Name, *want.FFmpegProfile, strings.Join(sortedKeys(profileID), ", "))
+		}
+		refs.profileID = id
+	}
+	if want.Watermark != nil {
+		id, ok := watermarkID[*want.Watermark]
+		if !ok {
+			return refs, fmt.Errorf("channel %q wants watermark %q, which does not exist on the server (have: %s)",
+				want.Name, *want.Watermark, strings.Join(sortedKeys(watermarkID), ", "))
+		}
+		refs.watermarkID = &id
+	}
+	if want.Filler != nil {
+		id, ok := fillerID[*want.Filler]
+		if !ok {
+			return refs, fmt.Errorf("channel %q wants filler %q, which does not exist on the server (have: %s)",
+				want.Name, *want.Filler, strings.Join(sortedKeys(fillerID), ", "))
+		}
+		refs.fillerID = &id
+	}
+	if want.MirrorSourceChannel != nil {
+		src, ok := existing[*want.MirrorSourceChannel]
+		if !ok {
+			src, ok = byNumber[*want.MirrorSourceChannel]
+		}
+		if !ok {
+			return refs, fmt.Errorf("channel %q mirrors %q, which is not a channel on the server",
+				want.Name, *want.MirrorSourceChannel)
+		}
+		id := src.ID
+		refs.mirrorID = &id
+	}
+
+	return refs, nil
+}
+
 // createChannelFields is the body for a new channel. Anything the manifest does not specify is left
 // out entirely, so the server applies its own default rather than a default invented here.
-func createChannelFields(want manifest.Channel, profileID int) map[string]any {
+func createChannelFields(want manifest.Channel, refs channelRefs) map[string]any {
 	fields := map[string]any{"name": want.Name}
-	if want.Number != nil {
-		fields["number"] = *want.Number
+	putStr(fields, "number", want.Number)
+	putStr(fields, "group", want.Group)
+	putStr(fields, "categories", want.Categories)
+	if refs.profileID != 0 {
+		fields["ffmpegProfileId"] = refs.profileID
 	}
-	if want.Group != nil {
-		fields["group"] = *want.Group
+	if want.SlugSeconds != nil {
+		fields["slugSeconds"] = *want.SlugSeconds
 	}
-	if profileID != 0 {
-		fields["ffmpegProfileId"] = profileID
+	putStr(fields, "streamSelectorMode", want.StreamSelectorMode)
+	putStr(fields, "streamSelector", want.StreamSelector)
+	putStr(fields, "streamingMode", want.StreamingMode)
+	putStr(fields, "streamingEngine", want.StreamingEngine)
+	putStr(fields, "nextEngineTextSubtitleMode", want.NextEngineTextSubtitleMode)
+	putStr(fields, "transcodeMode", want.TranscodeMode)
+	putStr(fields, "idleBehavior", want.IdleBehavior)
+	putStr(fields, "playoutSource", want.PlayoutSource)
+	putStr(fields, "playoutMode", want.PlayoutMode)
+	putStr(fields, "playoutOffset", want.PlayoutOffset)
+	if refs.mirrorID != nil {
+		fields["mirrorSourceChannelId"] = *refs.mirrorID
 	}
-	if want.StreamingMode != nil {
-		fields["streamingMode"] = *want.StreamingMode
+	putStr(fields, "preferredAudioLanguageCode", want.PreferredAudioLanguage)
+	putStr(fields, "preferredAudioTitle", want.PreferredAudioTitle)
+	putStr(fields, "preferredSubtitleLanguageCode", want.PreferredSubtitleLanguage)
+	putStr(fields, "subtitleMode", want.SubtitleMode)
+	putStr(fields, "musicVideoCreditsMode", want.MusicVideoCreditsMode)
+	putStr(fields, "musicVideoCreditsTemplate", want.MusicVideoCreditsTemplate)
+	putStr(fields, "songVideoMode", want.SongVideoMode)
+	if refs.watermarkID != nil {
+		fields["watermarkId"] = *refs.watermarkID
 	}
-	if want.TranscodeMode != nil {
-		fields["transcodeMode"] = *want.TranscodeMode
-	}
-	if want.IdleBehavior != nil {
-		fields["idleBehavior"] = *want.IdleBehavior
-	}
-	if want.PreferredAudioLanguage != nil {
-		fields["preferredAudioLanguageCode"] = *want.PreferredAudioLanguage
+	if refs.fillerID != nil {
+		fields["fallbackFillerId"] = *refs.fillerID
 	}
 	if want.Enabled != nil {
 		fields["isEnabled"] = *want.Enabled
@@ -288,40 +379,49 @@ func createChannelFields(want manifest.Channel, profileID int) map[string]any {
 }
 
 // channelChanges is the subset of fields that actually differ. Sending only these is what keeps a
-// partial update from resetting everything the manifest does not mention.
-func channelChanges(want manifest.Channel, have etv.ChannelDetail, profileID int) map[string]any {
+// partial update from resetting everything the manifest does not mention. Enum-valued fields are
+// compared case-insensitively because the server may echo a different casing than the manifest uses.
+func channelChanges(want manifest.Channel, have etv.ChannelDetail, refs channelRefs) map[string]any {
 	changes := map[string]any{}
 
 	// differs only when the channel was matched by number, i.e. it is being renamed
 	if want.Name != have.Name {
 		changes["name"] = want.Name
 	}
-	if want.Number != nil && *want.Number != have.Number {
-		changes["number"] = *want.Number
+	changeStr(changes, "number", want.Number, have.Number)
+	changeStr(changes, "group", want.Group, have.Group)
+	changeStr(changes, "categories", want.Categories, have.Categories)
+	if refs.profileID != 0 && refs.profileID != have.FFmpegProfileID {
+		changes["ffmpegProfileId"] = refs.profileID
 	}
-	if want.Group != nil && *want.Group != have.Group {
-		changes["group"] = *want.Group
+	if want.SlugSeconds != nil && !sameFloat(want.SlugSeconds, have.SlugSeconds) {
+		changes["slugSeconds"] = *want.SlugSeconds
 	}
-	if profileID != 0 && profileID != have.FFmpegProfileID {
-		changes["ffmpegProfileId"] = profileID
+	changeFold(changes, "streamSelectorMode", want.StreamSelectorMode, have.StreamSelectorMode)
+	changeStr(changes, "streamSelector", want.StreamSelector, have.StreamSelector)
+	changeFold(changes, "streamingMode", want.StreamingMode, have.StreamingMode)
+	changeFold(changes, "streamingEngine", want.StreamingEngine, have.StreamingEngine)
+	changeFold(changes, "nextEngineTextSubtitleMode", want.NextEngineTextSubtitleMode, have.NextEngineTextSubtitleMode)
+	changeFold(changes, "transcodeMode", want.TranscodeMode, have.TranscodeMode)
+	changeFold(changes, "idleBehavior", want.IdleBehavior, have.IdleBehavior)
+	changeFold(changes, "playoutSource", want.PlayoutSource, have.PlayoutSource)
+	changeFold(changes, "playoutMode", want.PlayoutMode, have.PlayoutMode)
+	changeStr(changes, "playoutOffset", want.PlayoutOffset, deref(have.PlayoutOffset))
+	if refs.mirrorID != nil && !sameInt(refs.mirrorID, have.MirrorSourceChannelID) {
+		changes["mirrorSourceChannelId"] = *refs.mirrorID
 	}
-	if want.StreamingMode != nil && !strings.EqualFold(*want.StreamingMode, have.StreamingMode) {
-		changes["streamingMode"] = *want.StreamingMode
+	changeStr(changes, "preferredAudioLanguageCode", want.PreferredAudioLanguage, deref(have.PreferredAudioLanguage))
+	changeStr(changes, "preferredAudioTitle", want.PreferredAudioTitle, have.PreferredAudioTitle)
+	changeStr(changes, "preferredSubtitleLanguageCode", want.PreferredSubtitleLanguage, deref(have.PreferredSubtitleLanguage))
+	changeFold(changes, "subtitleMode", want.SubtitleMode, have.SubtitleMode)
+	changeFold(changes, "musicVideoCreditsMode", want.MusicVideoCreditsMode, have.MusicVideoCreditsMode)
+	changeStr(changes, "musicVideoCreditsTemplate", want.MusicVideoCreditsTemplate, have.MusicVideoCreditsTemplate)
+	changeFold(changes, "songVideoMode", want.SongVideoMode, have.SongVideoMode)
+	if refs.watermarkID != nil && !sameInt(refs.watermarkID, have.WatermarkID) {
+		changes["watermarkId"] = *refs.watermarkID
 	}
-	if want.TranscodeMode != nil && !strings.EqualFold(*want.TranscodeMode, have.TranscodeMode) {
-		changes["transcodeMode"] = *want.TranscodeMode
-	}
-	if want.IdleBehavior != nil && !strings.EqualFold(*want.IdleBehavior, have.IdleBehavior) {
-		changes["idleBehavior"] = *want.IdleBehavior
-	}
-	if want.PreferredAudioLanguage != nil {
-		current := ""
-		if have.PreferredAudioLanguage != nil {
-			current = *have.PreferredAudioLanguage
-		}
-		if *want.PreferredAudioLanguage != current {
-			changes["preferredAudioLanguageCode"] = *want.PreferredAudioLanguage
-		}
+	if refs.fillerID != nil && !sameInt(refs.fillerID, have.FallbackFillerID) {
+		changes["fallbackFillerId"] = *refs.fillerID
 	}
 	if want.Enabled != nil && *want.Enabled != have.IsEnabled {
 		changes["isEnabled"] = *want.Enabled
@@ -331,6 +431,48 @@ func channelChanges(want manifest.Channel, have etv.ChannelDetail, profileID int
 	}
 
 	return changes
+}
+
+// putStr sets fields[key] to *v when the manifest manages that field (v is non-nil).
+func putStr(fields map[string]any, key string, v *string) {
+	if v != nil {
+		fields[key] = *v
+	}
+}
+
+// changeStr records a change when the manifest manages the field (want is non-nil) and it differs.
+func changeStr(changes map[string]any, key string, want *string, have string) {
+	if want != nil && *want != have {
+		changes[key] = *want
+	}
+}
+
+// changeFold is changeStr for enum-valued fields, comparing case-insensitively.
+func changeFold(changes map[string]any, key string, want *string, have string) {
+	if want != nil && !strings.EqualFold(*want, have) {
+		changes[key] = *want
+	}
+}
+
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func sameFloat(a, b *float64) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+func sameInt(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 // reconcileCollections converges membership in both directions. Creating a collection but never

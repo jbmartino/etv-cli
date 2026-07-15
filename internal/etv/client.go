@@ -48,22 +48,46 @@ type Channel struct {
 // does not: it reports ffmpegProfile and streamingMode as display strings ("MPEG-TS"), which cannot
 // be fed back in. Anything nullable is omitted from the response entirely, hence the pointers.
 type ChannelDetail struct {
-	ID                     int     `json:"id"`
-	Number                 string  `json:"number"`
-	Name                   string  `json:"name"`
-	Group                  string  `json:"group"`
-	Categories             string  `json:"categories"`
-	FFmpegProfileID        int     `json:"ffmpegProfileId"`
-	StreamingMode          string  `json:"streamingMode"`
-	StreamingEngine        string  `json:"streamingEngine"`
-	TranscodeMode          string  `json:"transcodeMode"`
-	IdleBehavior           string  `json:"idleBehavior"`
-	PreferredAudioLanguage *string `json:"preferredAudioLanguageCode"`
-	IsEnabled              bool    `json:"isEnabled"`
-	ShowInEpg              bool    `json:"showInEpg"`
+	ID                         int      `json:"id"`
+	Number                     string   `json:"number"`
+	Name                       string   `json:"name"`
+	Group                      string   `json:"group"`
+	Categories                 string   `json:"categories"`
+	FFmpegProfileID            int      `json:"ffmpegProfileId"`
+	SlugSeconds                *float64 `json:"slugSeconds"`
+	StreamSelectorMode         string   `json:"streamSelectorMode"`
+	StreamSelector             string   `json:"streamSelector"`
+	StreamingMode              string   `json:"streamingMode"`
+	StreamingEngine            string   `json:"streamingEngine"`
+	NextEngineTextSubtitleMode string   `json:"nextEngineTextSubtitleMode"`
+	TranscodeMode              string   `json:"transcodeMode"`
+	IdleBehavior               string   `json:"idleBehavior"`
+	PlayoutSource              string   `json:"playoutSource"`
+	PlayoutMode                string   `json:"playoutMode"`
+	MirrorSourceChannelID      *int     `json:"mirrorSourceChannelId"`
+	PlayoutOffset              *string  `json:"playoutOffset"`
+	PreferredAudioLanguage     *string  `json:"preferredAudioLanguageCode"`
+	PreferredAudioTitle        string   `json:"preferredAudioTitle"`
+	PreferredSubtitleLanguage  *string  `json:"preferredSubtitleLanguageCode"`
+	SubtitleMode               string   `json:"subtitleMode"`
+	MusicVideoCreditsMode      string   `json:"musicVideoCreditsMode"`
+	MusicVideoCreditsTemplate  string   `json:"musicVideoCreditsTemplate"`
+	SongVideoMode              string   `json:"songVideoMode"`
+	WatermarkID                *int     `json:"watermarkId"`
+	FallbackFillerID           *int     `json:"fallbackFillerId"`
+	IsEnabled                  bool     `json:"isEnabled"`
+	ShowInEpg                  bool     `json:"showInEpg"`
 }
 
 type Collection struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// NamedRef is the id-and-name shape of GET /api/watermarks and GET /api/fillers. A channel stores a
+// watermark or filler by numeric id, which is not portable across a rebuilt server, so the manifest
+// references them by name and resolves the name to an id through these lists.
+type NamedRef struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
@@ -199,6 +223,18 @@ func (c *Client) UpdateChannel(id int, fields map[string]any) error {
 func (c *Client) FFmpegProfiles() ([]FFmpegProfile, error) {
 	var v []FFmpegProfile
 	err := c.do(http.MethodGet, "/api/ffmpeg/profiles", "", nil, &v)
+	return v, err
+}
+
+func (c *Client) Watermarks() ([]NamedRef, error) {
+	var v []NamedRef
+	err := c.do(http.MethodGet, "/api/watermarks", "", nil, &v)
+	return v, err
+}
+
+func (c *Client) Fillers() ([]NamedRef, error) {
+	var v []NamedRef
+	err := c.do(http.MethodGet, "/api/fillers", "", nil, &v)
 	return v, err
 }
 

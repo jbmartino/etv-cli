@@ -31,6 +31,8 @@ type fakeETV struct {
 	schedules   map[string]string
 	shows       []etv.Show
 	profiles    []etv.FFmpegProfile
+	watermarks  []etv.NamedRef
+	fillers     []etv.NamedRef
 
 	nextChannelID, nextCollectionID, nextPlayoutID int
 
@@ -46,20 +48,36 @@ type fakeETV struct {
 }
 
 type fakeChannel struct {
-	ID                     int
-	Number                 string
-	Name                   string
-	Group                  string
-	Categories             string
-	FFmpegProfileID        int
-	StreamingMode          string
-	StreamingEngine        string
-	TranscodeMode          string
-	IdleBehavior           string
-	PreferredAudioLanguage *string
-	IsEnabled              bool
-	ShowInEpg              bool
-	LogoHash               string
+	ID                         int
+	Number                     string
+	Name                       string
+	Group                      string
+	Categories                 string
+	FFmpegProfileID            int
+	SlugSeconds                *float64
+	StreamSelectorMode         string
+	StreamSelector             string
+	StreamingMode              string
+	StreamingEngine            string
+	NextEngineTextSubtitleMode string
+	TranscodeMode              string
+	IdleBehavior               string
+	PlayoutSource              string
+	PlayoutMode                string
+	MirrorSourceChannelID      *int
+	PlayoutOffset              *string
+	PreferredAudioLanguage     *string
+	PreferredAudioTitle        string
+	PreferredSubtitleLanguage  *string
+	SubtitleMode               string
+	MusicVideoCreditsMode      string
+	MusicVideoCreditsTemplate  string
+	SongVideoMode              string
+	WatermarkID                *int
+	FallbackFillerID           *int
+	IsEnabled                  bool
+	ShowInEpg                  bool
+	LogoHash                   string
 }
 
 type fakeCollection struct {
@@ -96,6 +114,8 @@ func newFakeETV() *fakeETV {
 		nextCollectionID: 1,
 		nextPlayoutID:    1,
 		profiles:         []etv.FFmpegProfile{{ID: 1, Name: "default"}, {ID: 2, Name: "nvenc"}},
+		watermarks:       []etv.NamedRef{{ID: 1, Name: "corner-bug"}, {ID: 2, Name: "big-logo"}},
+		fillers:          []etv.NamedRef{{ID: 1, Name: "commercials"}, {ID: 2, Name: "bumpers"}},
 		shows: []etv.Show{
 			{MediaItemID: 10, Name: "South Park (1997)"},
 			{MediaItemID: 11, Name: "CatDog (1998)"},
@@ -189,6 +209,18 @@ func (f *fakeETV) routes() http.Handler {
 		writeJSON(w, f.profiles)
 	})
 
+	mux.HandleFunc("GET /api/watermarks", func(w http.ResponseWriter, _ *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		writeJSON(w, f.watermarks)
+	})
+
+	mux.HandleFunc("GET /api/fillers", func(w http.ResponseWriter, _ *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		writeJSON(w, f.fillers)
+	})
+
 	mux.HandleFunc("GET /api/channels", func(w http.ResponseWriter, _ *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -215,19 +247,35 @@ func (f *fakeETV) routes() http.Handler {
 			return
 		}
 		writeJSON(w, etv.ChannelDetail{
-			ID:                     ch.ID,
-			Number:                 ch.Number,
-			Name:                   ch.Name,
-			Group:                  ch.Group,
-			Categories:             ch.Categories,
-			FFmpegProfileID:        ch.FFmpegProfileID,
-			StreamingMode:          ch.StreamingMode,
-			StreamingEngine:        ch.StreamingEngine,
-			TranscodeMode:          ch.TranscodeMode,
-			IdleBehavior:           ch.IdleBehavior,
-			PreferredAudioLanguage: ch.PreferredAudioLanguage,
-			IsEnabled:              ch.IsEnabled,
-			ShowInEpg:              ch.ShowInEpg,
+			ID:                         ch.ID,
+			Number:                     ch.Number,
+			Name:                       ch.Name,
+			Group:                      ch.Group,
+			Categories:                 ch.Categories,
+			FFmpegProfileID:            ch.FFmpegProfileID,
+			SlugSeconds:                ch.SlugSeconds,
+			StreamSelectorMode:         ch.StreamSelectorMode,
+			StreamSelector:             ch.StreamSelector,
+			StreamingMode:              ch.StreamingMode,
+			StreamingEngine:            ch.StreamingEngine,
+			NextEngineTextSubtitleMode: ch.NextEngineTextSubtitleMode,
+			TranscodeMode:              ch.TranscodeMode,
+			IdleBehavior:               ch.IdleBehavior,
+			PlayoutSource:              ch.PlayoutSource,
+			PlayoutMode:                ch.PlayoutMode,
+			MirrorSourceChannelID:      ch.MirrorSourceChannelID,
+			PlayoutOffset:              ch.PlayoutOffset,
+			PreferredAudioLanguage:     ch.PreferredAudioLanguage,
+			PreferredAudioTitle:        ch.PreferredAudioTitle,
+			PreferredSubtitleLanguage:  ch.PreferredSubtitleLanguage,
+			SubtitleMode:               ch.SubtitleMode,
+			MusicVideoCreditsMode:      ch.MusicVideoCreditsMode,
+			MusicVideoCreditsTemplate:  ch.MusicVideoCreditsTemplate,
+			SongVideoMode:              ch.SongVideoMode,
+			WatermarkID:                ch.WatermarkID,
+			FallbackFillerID:           ch.FallbackFillerID,
+			IsEnabled:                  ch.IsEnabled,
+			ShowInEpg:                  ch.ShowInEpg,
 		})
 	})
 
@@ -514,15 +562,55 @@ func applyChannelFields(ch *fakeChannel, body map[string]any) {
 			ch.Categories = v.(string)
 		case "ffmpegProfileId":
 			ch.FFmpegProfileID = int(v.(float64))
+		case "slugSeconds":
+			s := v.(float64)
+			ch.SlugSeconds = &s
+		case "streamSelectorMode":
+			ch.StreamSelectorMode = v.(string)
+		case "streamSelector":
+			ch.StreamSelector = v.(string)
 		case "streamingMode":
 			ch.StreamingMode = v.(string)
+		case "streamingEngine":
+			ch.StreamingEngine = v.(string)
+		case "nextEngineTextSubtitleMode":
+			ch.NextEngineTextSubtitleMode = v.(string)
 		case "transcodeMode":
 			ch.TranscodeMode = v.(string)
 		case "idleBehavior":
 			ch.IdleBehavior = v.(string)
+		case "playoutSource":
+			ch.PlayoutSource = v.(string)
+		case "playoutMode":
+			ch.PlayoutMode = v.(string)
+		case "playoutOffset":
+			s := v.(string)
+			ch.PlayoutOffset = &s
+		case "mirrorSourceChannelId":
+			n := int(v.(float64))
+			ch.MirrorSourceChannelID = &n
 		case "preferredAudioLanguageCode":
 			s := v.(string)
 			ch.PreferredAudioLanguage = &s
+		case "preferredAudioTitle":
+			ch.PreferredAudioTitle = v.(string)
+		case "preferredSubtitleLanguageCode":
+			s := v.(string)
+			ch.PreferredSubtitleLanguage = &s
+		case "subtitleMode":
+			ch.SubtitleMode = v.(string)
+		case "musicVideoCreditsMode":
+			ch.MusicVideoCreditsMode = v.(string)
+		case "musicVideoCreditsTemplate":
+			ch.MusicVideoCreditsTemplate = v.(string)
+		case "songVideoMode":
+			ch.SongVideoMode = v.(string)
+		case "watermarkId":
+			n := int(v.(float64))
+			ch.WatermarkID = &n
+		case "fallbackFillerId":
+			n := int(v.(float64))
+			ch.FallbackFillerID = &n
 		case "isEnabled":
 			ch.IsEnabled = v.(bool)
 		case "showInEpg":

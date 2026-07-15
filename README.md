@@ -73,9 +73,21 @@ channels:
     transcodeMode: OnDemand
     idleBehavior: StopOnDisconnect
     preferredAudioLanguage: eng
+    watermark: corner-bug       # by name
+    filler: commercials         # by name
+    mirrorSourceChannel: G4 HD  # by name or number
     enabled: true
     showInEpg: true
 ```
+
+That is a sample, not the whole list: the manifest covers the channel settings that survive a
+rebuilt server, including categories, slug seconds, the stream selector, playout source/mode/offset,
+subtitle and music-video credit settings, and the song video mode.
+
+`ffmpegProfile`, `watermark`, `filler` and `mirrorSourceChannel` are references. The server stores
+each by a numeric id that a rebuilt server would not reuse, so the manifest names them and apply
+resolves the name against the server (watermarks and fillers via `GET /api/watermarks` and
+`GET /api/fillers`). A name that does not exist is an error, not a silent skip.
 
 `logo` has three states, and so does every nullable setting:
 
