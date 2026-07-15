@@ -498,3 +498,127 @@ channels:
 		t.Fatal("want an error for an ffmpeg profile that does not exist")
 	}
 }
+
+// The full portable field set, including references resolved by name, must be created and then round
+// trip: a second apply of the same manifest changes nothing.
+func TestFullFieldSetRoundTrips(t *testing.T) {
+	f := newFakeETV()
+	// a channel to mirror, already on the server so the name resolves
+	src := f.AddChannel(fakeChannel{Number: "1", Name: "Source", StreamingMode: "TransportStream", IsEnabled: true})
+	c := f.Start(t)
+
+	m := writeManifest(t, `
+schedulesDir: schedules
+collections:
+  - name: G4
+    shows: [South Park]
+channels:
+  - name: G4
+    schedule: g4
+    number: "5"
+    categories: "retro,scifi"
+    slugSeconds: 3.5
+    streamSelectorMode: Custom
+    playoutMode: OnDemand
+    subtitleMode: Any
+    songVideoMode: WithCredits
+    watermark: corner-bug
+    filler: commercials
+    mirrorSourceChannel: Source
+`)
+
+	run(t, c, m)
+
+	ch := f.Channel("G4")
+	if ch == nil {
+		t.Fatal("channel not created")
+	}
+	if ch.Categories != "retro,scifi" {
+		t.Errorf("categories = %q", ch.Categories)
+	}
+	if ch.SlugSeconds == nil || *ch.SlugSeconds != 3.5 {
+		t.Errorf("slugSeconds = %v, want 3.5", ch.SlugSeconds)
+	}
+	if ch.StreamSelectorMode != "Custom" {
+		t.Errorf("streamSelectorMode = %q", ch.StreamSelectorMode)
+	}
+	if ch.SubtitleMode != "Any" {
+		t.Errorf("subtitleMode = %q", ch.SubtitleMode)
+	}
+	if ch.WatermarkID == nil || *ch.WatermarkID != 1 {
+		t.Errorf("watermarkId = %v, want 1 (corner-bug)", ch.WatermarkID)
+	}
+	if ch.FallbackFillerID == nil || *ch.FallbackFillerID != 1 {
+		t.Errorf("fallbackFillerId = %v, want 1 (commercials)", ch.FallbackFillerID)
+	}
+	if ch.MirrorSourceChannelID == nil || *ch.MirrorSourceChannelID != src.ID {
+		t.Errorf("mirrorSourceChannelId = %v, want %d", ch.MirrorSourceChannelID, src.ID)
+	}
+
+	// The references were resolved from names, so a second apply must recognize them as unchanged.
+	res := run(t, c, m)
+	if res.Changed != 0 {
+		t.Fatalf("second apply was not a no-op: %d changes, puts=%v", res.Changed, f.ChannelPuts)
+	}
+}
+
+// Updating a single new field must send only that field, exactly like the original settings do.
+func TestNewFieldPartialUpdate(t *testing.T) {
+	f := newFakeETV()
+	ch := seedG4(f)
+	f.AddCollection("G4", etv.CollectionItem{MediaItemID: 10, Kind: "Show", Name: "South Park (1997)"})
+	f.AddSchedule("g4", schedule)
+	f.AddPlayout(ch.ID, schedulePath("g4"))
+	c := f.Start(t)
+
+	m := writeManifest(t, `
+schedulesDir: schedules
+collections:
+  - name: G4
+    shows: [South Park]
+channels:
+  - { name: G4, schedule: g4, logo: logos/g4.png, subtitleMode: Any }
+`)
+
+	res := run(t, c, m)
+
+	if res.Changed != 1 {
+		t.Fatalf("want 1 change, got %d", res.Changed)
+	}
+	if len(f.ChannelPuts) != 1 || len(f.ChannelPuts[0]) != 1 || f.ChannelPuts[0]["subtitleMode"] != "Any" {
+		t.Fatalf("want PUT of exactly {subtitleMode: Any}, got %v", f.ChannelPuts)
+	}
+	if ch.SubtitleMode != "Any" {
+		t.Errorf("subtitleMode not applied: %q", ch.SubtitleMode)
+	}
+}
+
+func TestUnknownWatermarkIsALoudError(t *testing.T) {
+	f := newFakeETV()
+	c := f.Start(t)
+
+	m := writeManifest(t, `
+schedulesDir: schedules
+channels:
+  - { name: G4, schedule: g4, watermark: does-not-exist }
+`)
+
+	if _, err := Apply(c, m, Options{}); err == nil {
+		t.Fatal("want an error for a watermark that does not exist")
+	}
+}
+
+func TestMirrorToUnknownChannelIsALoudError(t *testing.T) {
+	f := newFakeETV()
+	c := f.Start(t)
+
+	m := writeManifest(t, `
+schedulesDir: schedules
+channels:
+  - { name: G4, schedule: g4, mirrorSourceChannel: Nonexistent }
+`)
+
+	if _, err := Apply(c, m, Options{}); err == nil {
+		t.Fatal("want an error for mirroring a channel that does not exist")
+	}
+}

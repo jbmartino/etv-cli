@@ -42,15 +42,37 @@ type Channel struct {
 	// The manifest only owns what it actually mentions, so adopting an existing channel does not
 	// require writing down every field just to avoid resetting it. Pointers, not zero values,
 	// because "" and false are both legitimate things to want.
-	Number                 *string `yaml:"number"`
-	Group                  *string `yaml:"group"`
-	FFmpegProfile          *string `yaml:"ffmpegProfile"`
-	StreamingMode          *string `yaml:"streamingMode"`
-	TranscodeMode          *string `yaml:"transcodeMode"`
-	IdleBehavior           *string `yaml:"idleBehavior"`
-	PreferredAudioLanguage *string `yaml:"preferredAudioLanguage"`
-	Enabled                *bool   `yaml:"enabled"`
-	ShowInEpg              *bool   `yaml:"showInEpg"`
+	//
+	// FFmpegProfile, Watermark, Filler and MirrorSourceChannel are references: the server stores
+	// them by numeric id, but ids do not survive a rebuilt server, so the manifest names them and
+	// apply resolves the name to an id. A name that does not exist on the server is an error.
+	Number                     *string  `yaml:"number"`
+	Group                      *string  `yaml:"group"`
+	Categories                 *string  `yaml:"categories"`
+	FFmpegProfile              *string  `yaml:"ffmpegProfile"`
+	SlugSeconds                *float64 `yaml:"slugSeconds"`
+	StreamSelectorMode         *string  `yaml:"streamSelectorMode"`
+	StreamSelector             *string  `yaml:"streamSelector"`
+	StreamingMode              *string  `yaml:"streamingMode"`
+	StreamingEngine            *string  `yaml:"streamingEngine"`
+	NextEngineTextSubtitleMode *string  `yaml:"nextEngineTextSubtitleMode"`
+	TranscodeMode              *string  `yaml:"transcodeMode"`
+	IdleBehavior               *string  `yaml:"idleBehavior"`
+	PlayoutSource              *string  `yaml:"playoutSource"`
+	PlayoutMode                *string  `yaml:"playoutMode"`
+	PlayoutOffset              *string  `yaml:"playoutOffset"`
+	MirrorSourceChannel        *string  `yaml:"mirrorSourceChannel"`
+	PreferredAudioLanguage     *string  `yaml:"preferredAudioLanguage"`
+	PreferredAudioTitle        *string  `yaml:"preferredAudioTitle"`
+	PreferredSubtitleLanguage  *string  `yaml:"preferredSubtitleLanguage"`
+	SubtitleMode               *string  `yaml:"subtitleMode"`
+	MusicVideoCreditsMode      *string  `yaml:"musicVideoCreditsMode"`
+	MusicVideoCreditsTemplate  *string  `yaml:"musicVideoCreditsTemplate"`
+	SongVideoMode              *string  `yaml:"songVideoMode"`
+	Watermark                  *string  `yaml:"watermark"`
+	Filler                     *string  `yaml:"filler"`
+	Enabled                    *bool    `yaml:"enabled"`
+	ShowInEpg                  *bool    `yaml:"showInEpg"`
 }
 
 func Load(path string) (*Manifest, error) {
