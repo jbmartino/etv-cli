@@ -170,6 +170,36 @@ func TestExportProducesALoadableManifest(t *testing.T) {
 	}
 }
 
+// A logo that cannot be fetched must warn and be skipped, not abort the whole backup.
+func TestExportContinuesWhenLogoMissing(t *testing.T) {
+	wrap := http.NewServeMux()
+	wrap.HandleFunc("/iptv/logos/", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+	wrap.Handle("/", fakeServer())
+	srv := httptest.NewServer(wrap)
+	defer srv.Close()
+	c := etv.New(srv.URL, "k")
+	dir := t.TempDir()
+
+	var out []string
+	err := Export(c, Options{Dir: dir, Out: func(f string, a ...any) {
+		out = append(out, fmt.Sprintf(f, a...))
+	}})
+	if err != nil {
+		t.Fatalf("export should succeed despite a missing logo, got: %v", err)
+	}
+
+	m, err := manifest.Load(filepath.Join(dir, "etv.yaml"))
+	if err != nil {
+		t.Fatalf("manifest should still load: %v", err)
+	}
+	if m.Channels[0].Logo != nil {
+		t.Errorf("channel should have no logo when the fetch fails, got %q", *m.Channels[0].Logo)
+	}
+	if !contains(out, "could not fetch the logo") {
+		t.Errorf("a missing logo should warn, output: %v", out)
+	}
+}
+
 func TestExportRefusesToOverwriteWithoutForce(t *testing.T) {
 	srv := httptest.NewServer(fakeServer())
 	defer srv.Close()
