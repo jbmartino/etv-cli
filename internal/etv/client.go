@@ -357,6 +357,30 @@ func (c *Client) DeleteSchedule(name string) error {
 	return c.do(http.MethodDelete, "/api/schedules/"+url.PathEscape(name), "", nil, nil)
 }
 
+// GetLogo downloads a channel's logo by its path (the uppercase MD5 the API reports as logoPath).
+// Logos are served from /iptv/logos rather than under /api, and the response Content-Type is what
+// names the file on export.
+func (c *Client) GetLogo(logoPath string) (image []byte, contentType string, err error) {
+	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/iptv/logos/"+url.PathEscape(logoPath), nil)
+	if err != nil {
+		return nil, "", err
+	}
+	if c.APIKey != "" {
+		req.Header.Set("X-Api-Key", c.APIKey)
+	}
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, "", &APIError{Status: resp.StatusCode, Method: "GET", Path: "/iptv/logos/" + logoPath, Body: string(raw)}
+	}
+	return raw, resp.Header.Get("Content-Type"), nil
+}
+
 // SetChannelLogo uploads an image and sets it as the channel's logo, and nothing else.
 //
 // Still worth having now that PUT /api/channels merges instead of replacing: this takes the image
@@ -391,4 +415,21 @@ func LogoContentType(path string) (string, bool) {
 func LogoHash(image []byte) string {
 	sum := md5.Sum(image)
 	return strings.ToUpper(hex.EncodeToString(sum[:]))
+}
+
+// LogoExtension picks a file extension for a downloaded logo from its content type, so export writes
+// logos/<channel>.png rather than an extensionless hash. It is the inverse of LogoContentType.
+func LogoExtension(contentType string) string {
+	switch {
+	case strings.Contains(contentType, "png"):
+		return ".png"
+	case strings.Contains(contentType, "jpeg"), strings.Contains(contentType, "jpg"):
+		return ".jpg"
+	case strings.Contains(contentType, "gif"):
+		return ".gif"
+	case strings.Contains(contentType, "webp"):
+		return ".webp"
+	default:
+		return ".png"
+	}
 }

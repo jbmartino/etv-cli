@@ -19,6 +19,7 @@ import (
 
 	"github.com/jbmartino/etv-cli/internal/apply"
 	"github.com/jbmartino/etv-cli/internal/etv"
+	"github.com/jbmartino/etv-cli/internal/export"
 	"github.com/jbmartino/etv-cli/internal/manifest"
 	"github.com/jbmartino/etv-cli/internal/validate"
 	"github.com/spf13/cobra"
@@ -228,7 +229,28 @@ func main() {
 		},
 	}
 
-	root.AddCommand(applyCmd, planCmd, validateCmd, statusCmd)
+	var exportDir string
+	var exportForce bool
+
+	exportCmd := &cobra.Command{
+		Use:   "export",
+		Short: "Write the server's channels, schedules, and collections to a manifest directory",
+		Long: "Write the server's channels, schedules, and collections to a manifest directory that apply\n" +
+			"can push back, so a rebuilt server can be restored from files.\n\n" +
+			"Only channels running a single managed Sequential schedule can be represented in the manifest;\n" +
+			"anything else is reported and skipped.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return export.Export(client(), export.Options{
+				Dir:   exportDir,
+				Force: exportForce,
+				Out:   func(f string, a ...any) { fmt.Printf(f+"\n", a...) },
+			})
+		},
+	}
+	exportCmd.Flags().StringVarP(&exportDir, "out", "o", ".", "directory to write the manifest into")
+	exportCmd.Flags().BoolVar(&exportForce, "force", false, "overwrite an existing etv.yaml")
+
+	root.AddCommand(applyCmd, planCmd, validateCmd, statusCmd, exportCmd)
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

@@ -15,7 +15,7 @@ import (
 
 type Manifest struct {
 	// SchedulesDir holds the *.seq.yaml files, relative to the manifest.
-	SchedulesDir string       `yaml:"schedulesDir"`
+	SchedulesDir string       `yaml:"schedulesDir,omitempty"`
 	Collections  []Collection `yaml:"collections"`
 	Channels     []Channel    `yaml:"channels"`
 
@@ -36,7 +36,7 @@ type Channel struct {
 	// Logo is an image path relative to the manifest. Three states, like every other optional field:
 	// omitted means the manifest does not manage the logo and apply leaves whatever is there; an
 	// empty string means the channel should have no logo, and apply removes it; a path means set it.
-	Logo *string `yaml:"logo"`
+	Logo *string `yaml:"logo,omitempty"`
 
 	// Settings below are optional, and unset means unmanaged: apply leaves whatever the server has.
 	// The manifest only owns what it actually mentions, so adopting an existing channel does not
@@ -46,33 +46,33 @@ type Channel struct {
 	// FFmpegProfile, Watermark, Filler and MirrorSourceChannel are references: the server stores
 	// them by numeric id, but ids do not survive a rebuilt server, so the manifest names them and
 	// apply resolves the name to an id. A name that does not exist on the server is an error.
-	Number                     *string  `yaml:"number"`
-	Group                      *string  `yaml:"group"`
-	Categories                 *string  `yaml:"categories"`
-	FFmpegProfile              *string  `yaml:"ffmpegProfile"`
-	SlugSeconds                *float64 `yaml:"slugSeconds"`
-	StreamSelectorMode         *string  `yaml:"streamSelectorMode"`
-	StreamSelector             *string  `yaml:"streamSelector"`
-	StreamingMode              *string  `yaml:"streamingMode"`
-	StreamingEngine            *string  `yaml:"streamingEngine"`
-	NextEngineTextSubtitleMode *string  `yaml:"nextEngineTextSubtitleMode"`
-	TranscodeMode              *string  `yaml:"transcodeMode"`
-	IdleBehavior               *string  `yaml:"idleBehavior"`
-	PlayoutSource              *string  `yaml:"playoutSource"`
-	PlayoutMode                *string  `yaml:"playoutMode"`
-	PlayoutOffset              *string  `yaml:"playoutOffset"`
-	MirrorSourceChannel        *string  `yaml:"mirrorSourceChannel"`
-	PreferredAudioLanguage     *string  `yaml:"preferredAudioLanguage"`
-	PreferredAudioTitle        *string  `yaml:"preferredAudioTitle"`
-	PreferredSubtitleLanguage  *string  `yaml:"preferredSubtitleLanguage"`
-	SubtitleMode               *string  `yaml:"subtitleMode"`
-	MusicVideoCreditsMode      *string  `yaml:"musicVideoCreditsMode"`
-	MusicVideoCreditsTemplate  *string  `yaml:"musicVideoCreditsTemplate"`
-	SongVideoMode              *string  `yaml:"songVideoMode"`
-	Watermark                  *string  `yaml:"watermark"`
-	Filler                     *string  `yaml:"filler"`
-	Enabled                    *bool    `yaml:"enabled"`
-	ShowInEpg                  *bool    `yaml:"showInEpg"`
+	Number                     *string  `yaml:"number,omitempty"`
+	Group                      *string  `yaml:"group,omitempty"`
+	Categories                 *string  `yaml:"categories,omitempty"`
+	FFmpegProfile              *string  `yaml:"ffmpegProfile,omitempty"`
+	SlugSeconds                *float64 `yaml:"slugSeconds,omitempty"`
+	StreamSelectorMode         *string  `yaml:"streamSelectorMode,omitempty"`
+	StreamSelector             *string  `yaml:"streamSelector,omitempty"`
+	StreamingMode              *string  `yaml:"streamingMode,omitempty"`
+	StreamingEngine            *string  `yaml:"streamingEngine,omitempty"`
+	NextEngineTextSubtitleMode *string  `yaml:"nextEngineTextSubtitleMode,omitempty"`
+	TranscodeMode              *string  `yaml:"transcodeMode,omitempty"`
+	IdleBehavior               *string  `yaml:"idleBehavior,omitempty"`
+	PlayoutSource              *string  `yaml:"playoutSource,omitempty"`
+	PlayoutMode                *string  `yaml:"playoutMode,omitempty"`
+	PlayoutOffset              *string  `yaml:"playoutOffset,omitempty"`
+	MirrorSourceChannel        *string  `yaml:"mirrorSourceChannel,omitempty"`
+	PreferredAudioLanguage     *string  `yaml:"preferredAudioLanguage,omitempty"`
+	PreferredAudioTitle        *string  `yaml:"preferredAudioTitle,omitempty"`
+	PreferredSubtitleLanguage  *string  `yaml:"preferredSubtitleLanguage,omitempty"`
+	SubtitleMode               *string  `yaml:"subtitleMode,omitempty"`
+	MusicVideoCreditsMode      *string  `yaml:"musicVideoCreditsMode,omitempty"`
+	MusicVideoCreditsTemplate  *string  `yaml:"musicVideoCreditsTemplate,omitempty"`
+	SongVideoMode              *string  `yaml:"songVideoMode,omitempty"`
+	Watermark                  *string  `yaml:"watermark,omitempty"`
+	Filler                     *string  `yaml:"filler,omitempty"`
+	Enabled                    *bool    `yaml:"enabled,omitempty"`
+	ShowInEpg                  *bool    `yaml:"showInEpg,omitempty"`
 }
 
 func Load(path string) (*Manifest, error) {

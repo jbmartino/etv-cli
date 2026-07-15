@@ -102,6 +102,7 @@ resolves the name against the server (watermarks and fillers via `GET /api/water
 ```
 etv plan        show what apply would change (alias: diff)
 etv apply       push your channel setup to the server
+etv export      write the server's setup to a manifest directory
 etv validate    check the schedules locally, no server needed
 etv status      show what the server currently has
 ```
@@ -127,6 +128,22 @@ $ etv apply
 validated 12 schedules
 already up to date
 ```
+
+## Backing up
+
+`etv export` reads a running server and writes the manifest that would reproduce it: `etv.yaml`, the
+schedule files, and the logos. Point `apply` at that directory later and a rebuilt server comes back.
+
+```sh
+etv export -o backup/          # writes backup/etv.yaml, backup/schedules/, backup/logos/
+etv apply -f backup/etv.yaml   # restore onto a fresh server
+```
+
+Export refuses to overwrite an existing `etv.yaml` unless you pass `--force`. It writes only what the
+manifest can faithfully round-trip: a channel whose playout is not a single managed Sequential
+schedule is reported and skipped rather than written as something that would not come back the same.
+References (`ffmpegProfile`, `watermark`, `filler`, `mirrorSourceChannel`) are written by name, so the
+backup does not depend on the server's internal ids surviving.
 
 ## What it will and will not do
 
