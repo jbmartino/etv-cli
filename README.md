@@ -1,13 +1,10 @@
 # etv
 
-Go CLI to manage ErsatzTV channels, collections, schedules, and playouts from a YAML config.
+Go CLI to manage ErsatzTV. Import channels, collections, schedules, and playouts from YAML, and export a running server back to files as a backup.
 
-Keep your setup in files and push it with `etv import`. It works alongside the ErsatzTV web UI, not
-instead of it, and only ever touches what you name. Because the files are the setup, they double as a
-backup: if the server is rebuilt, `etv import` puts your channels, collections, and schedules back.
-
-Everything happens over the ErsatzTV HTTP API. There is no SSH, no `scp`, no `docker cp`, and no
-volume mount, so the same binary drives a desktop, a container, or a cluster without knowing which.
+Keep your setup in files: push them to the server with `etv import`, and pull a running server back
+into files with `etv export`. It works alongside the ErsatzTV web UI, not instead of it, and only
+ever touches what you name. If the server is rebuilt, `etv import` puts your channels, collections, and schedules back without all the manual clicking.
 
 ## Install
 
@@ -182,7 +179,7 @@ ever intend to rename them, otherwise a rename reads as "create a new channel".
 
 Needs an ErsatzTV with the management API, including `PUT /api/schedules/{name}` and
 `GET /api/collections/{id}/items`. Without the schedules API a schedule file has to be placed on the
-server by hand, which is the whole thing this tool exists to avoid.
+server by hand, which is the whole thing this tool exists to avoid. This is currently not upstream but rather my own forked version. https://github.com/jbmartino/ersatztv
 
 ## Development
 
