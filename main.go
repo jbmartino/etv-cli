@@ -1,7 +1,8 @@
 // Command etv manages and backs up ErsatzTV channels over its HTTP API.
 //
-//	etv plan           show what apply would change
-//	etv apply          push your channel setup to a live instance
+//	etv plan           show what import would change
+//	etv import         push your channel setup to a live instance (alias: apply)
+//	etv export         write the server's setup to a manifest directory
 //	etv validate       check the schedules locally, no server needed
 //	etv status         what the server currently has
 //
@@ -56,7 +57,7 @@ func loadManifest() *manifest.Manifest {
 	return m
 }
 
-// plan is a read-only pass: it reports what apply would do, and what exists on the server that the
+// plan is a read-only pass: it reports what import would do, and what exists on the server that the
 // manifest never names.
 func plan(c *etv.Client, m *manifest.Manifest) (*apply.Result, error) {
 	res, err := apply.Apply(c, m, apply.Options{
@@ -99,10 +100,11 @@ func main() {
 	var dryRun bool
 	var autoApprove bool
 
-	applyCmd := &cobra.Command{
-		Use:   "apply",
-		Short: "Push your channel setup to the server",
-		Long: "Push your channel setup to the server.\n\n" +
+	importCmd := &cobra.Command{
+		Use:     "import",
+		Aliases: []string{"apply"},
+		Short:   "Push your channel setup to the server",
+		Long: "Push your channel setup to the server. Aliased as `apply`.\n\n" +
 			"Shows the plan first and asks before changing anything, because repointing a playout deletes\n" +
 			"and rebuilds it, which discards that channel's existing guide data. Use -y in CI or a git hook.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -147,13 +149,13 @@ func main() {
 			return nil
 		},
 	}
-	applyCmd.Flags().BoolVar(&dryRun, "dry-run", false, "show changes without making them (same as plan)")
-	applyCmd.Flags().BoolVarP(&autoApprove, "yes", "y", false, "do not ask for confirmation")
+	importCmd.Flags().BoolVar(&dryRun, "dry-run", false, "show changes without making them (same as plan)")
+	importCmd.Flags().BoolVarP(&autoApprove, "yes", "y", false, "do not ask for confirmation")
 
 	planCmd := &cobra.Command{
 		Use:     "plan",
 		Aliases: []string{"diff"},
-		Short:   "Show what apply would change",
+		Short:   "Show what import would change",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			m := loadManifest()
 			res, err := plan(client(), m)
@@ -235,7 +237,7 @@ func main() {
 	exportCmd := &cobra.Command{
 		Use:   "export",
 		Short: "Write the server's channels, schedules, and collections to a manifest directory",
-		Long: "Write the server's channels, schedules, and collections to a manifest directory that apply\n" +
+		Long: "Write the server's channels, schedules, and collections to a manifest directory that import\n" +
 			"can push back, so a rebuilt server can be restored from files.\n\n" +
 			"Only channels running a single managed Sequential schedule can be represented in the manifest;\n" +
 			"anything else is reported and skipped.",
@@ -250,7 +252,7 @@ func main() {
 	exportCmd.Flags().StringVarP(&exportDir, "out", "o", ".", "directory to write the manifest into")
 	exportCmd.Flags().BoolVar(&exportForce, "force", false, "overwrite an existing etv.yaml")
 
-	root.AddCommand(applyCmd, planCmd, validateCmd, statusCmd, exportCmd)
+	root.AddCommand(importCmd, planCmd, validateCmd, statusCmd, exportCmd)
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

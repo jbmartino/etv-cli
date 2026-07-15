@@ -2,9 +2,9 @@
 
 Go CLI to manage ErsatzTV channels, collections, schedules, and playouts from a YAML config.
 
-Keep your setup in files and push it with `etv apply`. It works alongside the ErsatzTV web UI, not
+Keep your setup in files and push it with `etv import`. It works alongside the ErsatzTV web UI, not
 instead of it, and only ever touches what you name. Because the files are the setup, they double as a
-backup: if the server is rebuilt, `etv apply` puts your channels, collections, and schedules back.
+backup: if the server is rebuilt, `etv import` puts your channels, collections, and schedules back.
 
 Everything happens over the ErsatzTV HTTP API. There is no SSH, no `scp`, no `docker cp`, and no
 volume mount, so the same binary drives a desktop, a container, or a cluster without knowing which.
@@ -57,7 +57,7 @@ not a warning.
 
 ### Channel settings
 
-Every channel setting is optional, and **omitting one means the manifest does not manage it**. Apply
+Every channel setting is optional, and **omitting one means the manifest does not manage it**. Import
 leaves whatever the server has. That is what makes it safe to adopt existing channels without
 writing down all thirty fields just to avoid resetting them.
 
@@ -85,7 +85,7 @@ rebuilt server, including categories, slug seconds, the stream selector, playout
 subtitle and music-video credit settings, and the song video mode.
 
 `ffmpegProfile`, `watermark`, `filler` and `mirrorSourceChannel` are references. The server stores
-each by a numeric id that a rebuilt server would not reuse, so the manifest names them and apply
+each by a numeric id that a rebuilt server would not reuse, so the manifest names them and import
 resolves the name against the server (watermarks and fillers via `GET /api/watermarks` and
 `GET /api/fillers`). A name that does not exist is an error, not a silent skip.
 
@@ -93,21 +93,22 @@ resolves the name against the server (watermarks and fillers via `GET /api/water
 
 | you write | meaning |
 |---|---|
-| *omitted* | not managed, apply leaves the current value alone |
-| `logo: ""` | managed and empty, apply removes the logo |
-| `logo: logos/g4.png` | managed, apply uploads it if it differs |
+| *omitted* | not managed, import leaves the current value alone |
+| `logo: ""` | managed and empty, import removes the logo |
+| `logo: logos/g4.png` | managed, import uploads it if it differs |
 
 ## Commands
 
 ```
-etv plan        show what apply would change (alias: diff)
-etv apply       push your channel setup to the server
+etv plan        show what import would change (alias: diff)
+etv import      push your channel setup to the server (alias: apply)
 etv export      write the server's setup to a manifest directory
 etv validate    check the schedules locally, no server needed
 etv status      show what the server currently has
 ```
 
-`apply` prints the plan and asks before it changes anything. Pass `-y` in CI or a git hook.
+`import` prints the plan and asks before it changes anything. Pass `-y` in CI or a git hook. The
+command is also available as `apply`, so an existing git hook or muscle memory keeps working.
 
 ```sh
 $ etv plan
@@ -120,11 +121,11 @@ validated 12 schedules
 4 change(s) would be applied
 ```
 
-Applying an unchanged manifest changes nothing and rebuilds nothing, so it is safe to run on every
+Importing an unchanged manifest changes nothing and rebuilds nothing, so it is safe to run on every
 push.
 
 ```sh
-$ etv apply
+$ etv import
 validated 12 schedules
 already up to date
 ```
@@ -132,11 +133,11 @@ already up to date
 ## Backing up
 
 `etv export` reads a running server and writes the manifest that would reproduce it: `etv.yaml`, the
-schedule files, and the logos. Point `apply` at that directory later and a rebuilt server comes back.
+schedule files, and the logos. Point `import` at that directory later and a rebuilt server comes back.
 
 ```sh
-etv export -o backup/          # writes backup/etv.yaml, backup/schedules/, backup/logos/
-etv apply -f backup/etv.yaml   # restore onto a fresh server
+etv export -o backup/           # writes backup/etv.yaml, backup/schedules/, backup/logos/
+etv import -f backup/etv.yaml   # restore onto a fresh server
 ```
 
 Export refuses to overwrite an existing `etv.yaml` unless you pass `--force`. It writes only what the
@@ -164,7 +165,7 @@ not in the manifest, left alone:
 A partial manifest is a normal thing to have, and a tool that pruned by default would be one typo
 away from taking every channel off the air. If you want those gone, delete them yourself.
 
-It **never quietly does nothing**. If the manifest asks for something apply cannot do, it fails and
+It **never quietly does nothing**. If the manifest asks for something import cannot do, it fails and
 says why. A tool that silently no-ops is worse than one that errors, because you believe it.
 
 ### Renaming
