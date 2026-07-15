@@ -181,12 +181,16 @@ func Export(c *etv.Client, opts Options) error {
 			mc.MirrorSourceChannel = ptr(name)
 		}
 
+		// A missing logo must not abort the whole backup: the channel still exports, just without
+		// its logo. Warn loudly rather than fail, and rather than skip silently, so an incomplete
+		// backup is visible without being useless.
 		if ch.LogoPath != "" {
 			rel, err := writeLogo(c, dir, ch)
 			if err != nil {
-				return err
+				say("warning: could not fetch the logo for channel %q, exporting without it: %v", ch.Name, err)
+			} else {
+				mc.Logo = ptr(rel)
 			}
-			mc.Logo = ptr(rel)
 		}
 
 		usedSchedules[schedName] = true
