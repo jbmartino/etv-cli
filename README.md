@@ -103,9 +103,14 @@ resolves the name against the server (watermarks and fillers via `GET /api/water
 etv plan        show what import would change (alias: diff)
 etv import      push your channel setup to the server (alias: apply)
 etv export      write the server's setup to a manifest directory
+etv guide       show what is on now and next, per channel
 etv validate    check the schedules locally, no server needed
 etv status      show what the server currently has
 ```
+
+`etv guide` reads the server's own XMLTV, which always matches the stream. Plex caches its own copy
+that can lag after a playout rebuild, so when Plex and the picture disagree, `etv guide` is the
+tie-breaker.
 
 `import` prints the plan and asks before it changes anything. Pass `-y` in CI or a git hook. The
 command is also available as `apply`, so an existing git hook or muscle memory keeps working.
