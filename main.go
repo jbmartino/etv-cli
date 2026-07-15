@@ -3,6 +3,7 @@
 //	etv plan           show what import would change
 //	etv import         push your channel setup to a live instance (alias: apply)
 //	etv export         write the server's setup to a manifest directory
+//	etv guide          what is on now and next, per channel
 //	etv validate       check the schedules locally, no server needed
 //	etv status         what the server currently has
 //
@@ -17,10 +18,12 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/jbmartino/etv-cli/internal/apply"
 	"github.com/jbmartino/etv-cli/internal/etv"
 	"github.com/jbmartino/etv-cli/internal/export"
+	"github.com/jbmartino/etv-cli/internal/guide"
 	"github.com/jbmartino/etv-cli/internal/manifest"
 	"github.com/jbmartino/etv-cli/internal/validate"
 	"github.com/spf13/cobra"
@@ -84,6 +87,13 @@ func confirm(prompt string) (bool, error) {
 	}
 	answer := strings.TrimSpace(strings.ToLower(line))
 	return answer == "y" || answer == "yes", nil
+}
+
+func fmtProgramme(p *guide.Programme) string {
+	if p == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%s (%s)", p.Title, p.Start.Local().Format("15:04"))
 }
 
 func main() {
@@ -231,6 +241,36 @@ func main() {
 		},
 	}
 
+	guideCmd := &cobra.Command{
+		Use:   "guide",
+		Short: "Show what is on now and next, per channel",
+		Long: "Show what is on now and next, per channel, straight from the server's XMLTV guide.\n\n" +
+			"This is the server's own guide, which always matches the stream. Plex caches a copy that can\n" +
+			"lag after a playout rebuild, so when Plex and the picture disagree, this is the tie-breaker.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			raw, err := client().Guide()
+			if err != nil {
+				return err
+			}
+			channels, err := guide.Parse(raw)
+			if err != nil {
+				return err
+			}
+			now := time.Now()
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "CHANNEL\tNOW\tNEXT")
+			for _, ch := range channels {
+				label := ch.Name
+				if ch.Number != "" {
+					label = ch.Number + " " + ch.Name
+				}
+				cur, nxt := ch.NowNext(now)
+				fmt.Fprintf(w, "%s\t%s\t%s\n", label, fmtProgramme(cur), fmtProgramme(nxt))
+			}
+			return w.Flush()
+		},
+	}
+
 	var exportDir string
 	var exportForce bool
 
@@ -252,7 +292,7 @@ func main() {
 	exportCmd.Flags().StringVarP(&exportDir, "out", "o", ".", "directory to write the manifest into")
 	exportCmd.Flags().BoolVar(&exportForce, "force", false, "overwrite an existing etv.yaml")
 
-	root.AddCommand(importCmd, planCmd, validateCmd, statusCmd, exportCmd)
+	root.AddCommand(importCmd, planCmd, validateCmd, statusCmd, exportCmd, guideCmd)
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

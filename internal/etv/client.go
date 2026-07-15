@@ -357,6 +357,29 @@ func (c *Client) DeleteSchedule(name string) error {
 	return c.do(http.MethodDelete, "/api/schedules/"+url.PathEscape(name), "", nil, nil)
 }
 
+// Guide fetches the XMLTV guide, the same document Plex reads. It is served from /iptv rather than
+// under /api, so it does not require the API key, but sending it is harmless.
+func (c *Client) Guide() ([]byte, error) {
+	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/iptv/xmltv.xml", nil)
+	if err != nil {
+		return nil, err
+	}
+	if c.APIKey != "" {
+		req.Header.Set("X-Api-Key", c.APIKey)
+	}
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, &APIError{Status: resp.StatusCode, Method: "GET", Path: "/iptv/xmltv.xml", Body: string(raw)}
+	}
+	return raw, nil
+}
+
 // GetLogo downloads a channel's logo by its path (the uppercase MD5 the API reports as logoPath).
 // Logos are served from /iptv/logos rather than under /api, and the response Content-Type is what
 // names the file on export.
